@@ -1,0 +1,472 @@
+---
+title: "Project 1"
+author: "John Girard, Alex Lopez, Duy Nguyen"
+date: "5/26/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Libraries
+```{r, warning=F, message=F}
+library(tidyverse)
+library(psych)          # describe()
+library(DataExplorer)   # plot_missing() | drop_columns()
+library(caret)          # nearZeroVar() | knnreg()
+library(inspectdf)      # inspect_cat() | show_plots()
+library(ggstance)       # geom_boxploth()
+library(corrplot)       # corrplot() | cor()
+library(ggpubr)         # ggscatter()
+library(MASS)           # stepAIC()
+library(regclass)       # vif()
+library(leaps)          # regsubsets()
+library(ggplot2)        # ggplot()
+library(purrr)          # map()
+library(GGally)         # ggcorr()
+library(lindia)         # gg_cooksd() | gg_scalelocation
+library(gridExtra)      # grid.arrange
+library(FNN)            # knn.reg()
+library(Metrics)        # mse()
+
+```
+
+## Import Data
+```{r}
+getwd()
+df = read.csv("Life Expectancy Data.csv")
+
+```
+
+## Missing Values Alex
+```{r}
+table(is.na(df))
+plot_missing(df)
+```
+
+```{r}
+### Impute missing columns with their medians
+df$Life.expectancy[is.na(df$Life.expectancy)] = median(df$Life.expectancy, na.rm = T)
+df$Adult.Mortality[is.na(df$Adult.Mortality)] = median(df$Adult.Mortality, na.rm = T)
+df$Alcohol[is.na(df$Alcohol)] = median(df$Alcohol, na.rm = T)
+df$Hepatitis.B[is.na(df$Hepatitis.B)] = median(df$Hepatitis.B, na.rm = T)
+df$BMI[is.na(df$BMI)] = median(df$BMI, na.rm = T)
+df$Polio[is.na(df$Polio)] = median(df$Polio, na.rm = T)
+df$Total.expenditure[is.na(df$Total.expenditure)] = median(df$Total.expenditure, na.rm = T)
+df$Diphtheria[is.na(df$Diphtheria)] = median(df$Diphtheria, na.rm = T)
+df$GDP[is.na(df$GDP)] = median(df$GDP, na.rm = T)
+df$Population[is.na(df$Population)] = median(df$Population, na.rm = T)
+df$thinness..1.19.years[is.na(df$thinness..1.19.years)] = median(df$thinness..1.19.years, na.rm = T)
+df$thinness.5.9.years[is.na(df$thinness.5.9.years)] = median(df$thinness.5.9.years, na.rm = T)
+df$Income.composition.of.resources[is.na(df$Income.composition.of.resources)] = median(df$Income.composition.of.resources, na.rm = T)
+df$Schooling[is.na(df$Schooling)] = median(df$Schooling, na.rm = T)
+```
+
+```{r}
+# Sanity check
+table(is.na(df))
+plot_missing(df)
+```
+
+## Missing Values Duy
+```{r, echo=F, eval=F}
+table(is.na(df))
+plot_missing(df)
+
+df %>% 
+  select_if(~ any(is.na(.))) %>%
+  gather(na.rm=TRUE) %>%
+  ggplot(aes(x = value, y = -0.5)) +
+  geom_boxploth() +
+  geom_density(aes(x = value, y = stat(scaled)), inherit.aes = FALSE) +
+  facet_wrap(~key, scales = 'free')
+
+# Imputing MEDIANS for variables with lots of outliers
+df = df %>%
+  mutate(Adult.Mortality = replace_na(Adult.Mortality, replace = median(df$Adult.Mortality, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Diphtheria = replace_na(Diphtheria, replace = median(df$Diphtheria, na.rm = TRUE)))
+
+df = df %>%
+  mutate(GDP = replace_na(GDP, replace = median(df$GDP, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Hepatitis.B = replace_na(Hepatitis.B, replace = median(df$Hepatitis.B, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Life.expectancy = replace_na(Life.expectancy, replace = median(df$Life.expectancy, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Polio = replace_na(Polio, replace = median(df$Polio, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Population = replace_na(Population, replace = median(df$Population, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Schooling = replace_na(Schooling, replace = median(df$Schooling, na.rm = TRUE)))
+
+df = df %>%
+  mutate(thinness..1.19.years = replace_na(thinness..1.19.years, replace = median(df$thinness..1.19.years, na.rm = TRUE)))
+
+df = df %>%
+  mutate(thinness.5.9.years = replace_na(thinness.5.9.years, replace = median(df$thinness.5.9.years, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Total.expenditure = replace_na(Total.expenditure, replace = median(df$Total.expenditure, na.rm = TRUE)))
+
+# Imputing MEANS for variables with little to no outliers
+df = df %>%
+  mutate(Alcohol = replace_na(Alcohol, replace = mean(df$Alcohol, na.rm = TRUE)))
+
+df = df %>%
+  mutate(BMI = replace_na(BMI, replace = mean(df$BMI, na.rm = TRUE)))
+
+df = df %>%
+  mutate(Income.composition.of.resources = replace_na(Income.composition.of.resources, replace = mean(df$Income.composition.of.resources, na.rm = TRUE)))
+
+# Sanity check
+table(is.na(df))
+plot_missing(df)
+```
+
+## Zero Variance
+```{r}
+# Identify the names of zero variance columns
+zero_var_col_names = nearZeroVar(df, names = TRUE)
+zero_var_col_names
+
+# No zero variance columns found!
+
+```
+
+## Preparing for EDA
+```{r}
+str(df)
+
+# Convert character variables into factors
+df[sapply(df, is.character)] = lapply(df[sapply(df, is.character)], as.factor)
+
+# Remove Country because too many levels
+# Remove Year because can cause autocorrelation
+df = subset(df, select = -c(Country, Year))
+
+```
+
+## EDA
+```{r}
+str(df)
+describe(df)
+table(is.na(df))
+dim(df)
+
+# Correlations plot
+ggcorr(df, 
+       label = T, 
+       label_size = 2,
+       label_round = 2,
+       hjust = 1,
+       size = 3, 
+       color = "royalblue",
+       layout.exp = 5,
+       low = "salmon", 
+       mid = "white", 
+       high = "turquoise",
+       name = "Correlation")
+
+# under.five.deaths and infant.deaths are problematic with corr = 1
+
+## Dealing with under.five.deaths and infant.deaths 
+## under5_removed_df
+under5_removed_df = subset(df, select = -c(under.five.deaths))
+under5_removed_model = lm(Life.expectancy ~ ., data = under5_removed_df)
+summary(under5_removed_model)$r.squared
+
+## infantdeaths_removed_df
+infantdeaths_removed_df = subset(df, select = -c(infant.deaths))
+infantdeaths_removed_model = lm(Life.expectancy ~ ., data = infantdeaths_removed_df)
+summary(infantdeaths_removed_model)$r.squared
+
+## Confirming infantdeaths_removed_df
+df = infantdeaths_removed_df
+
+# Further bivariate analysis
+df %>% gather(-Life.expectancy, -Status, -GDP, key = "var", value = "Features") %>%
+  ggplot(aes(x = Features, y = Life.expectancy, color = Status, size = GDP)) +
+  geom_point(shape = 1) +
+  facet_wrap(~ var, scales = "free") + theme_bw()
+
+```
+
+## Split the Data
+```{r}
+## Seed to make partition reproducible
+set.seed(1)
+
+# train/test split
+smp_size = floor(0.85 * nrow(df))
+
+train_indices = sample(seq_len(nrow(df)), size = smp_size)
+
+train = df[train_indices, ]
+test = df[-train_indices, ]
+
+```
+
+
+## Feature Selection
+```{r}
+reg.mod = regsubsets(Life.expectancy~., data = train, nvmax = 20)
+fwd.mod = regsubsets(Life.expectancy~., data = train, method = "forward", nvmax = 20)
+bwd.mod = regsubsets(Life.expectancy~., data = train, method = "backward", nvmax = 20)
+
+paste(max(summary(reg.mod)$rsq), " | ", max(summary(reg.mod)$adjr2), " | ", min(summary(reg.mod)$rss), " | ", min(summary(reg.mod)$bic), " | ", min(summary(reg.mod)$cp))
+paste(max(summary(fwd.mod)$rsq), " | ", max(summary(fwd.mod)$adjr2), " | ", min(summary(fwd.mod)$rss), " | ", min(summary(fwd.mod)$bic), " | ", min(summary(fwd.mod)$cp))
+paste(max(summary(bwd.mod)$rsq), " | ", max(summary(fwd.mod)$adjr2), " | ", min(summary(bwd.mod)$rss), " | ", min(summary(fwd.mod)$bic), " | ", min(summary(bwd.mod)$cp))
+
+## Finding Number of Predictors For Feature Selection Model
+### Predict Function
+predict.regsubsets = function (object , newdata ,id ,...){
+  form=as.formula (object$call [[2]])
+  mat=model.matrix(form ,newdata )
+  coefi=coef(object ,id=id)
+  xvars=names(coefi)
+  mat[,xvars]%*%coefi
+}
+
+testASE = c()
+
+ncol(test)
+ncol(train)
+ncol(df)
+
+for (i in 1:(ncol(train)-2)){
+  predictions = predict.regsubsets(object = reg.mod, newdata = test, id = i) 
+  testASE[i] = mean((test$Life.expectancy - predictions)^2)
+  #print(testASE)
+}
+
+par(mfrow=c(1,1))
+plot(1:(ncol(train)-2), testASE, type = "l", xlab = "Number of predictors", ylab = "Test ASE")
+axis(1, at = seq(round(min(1)), round(max((ncol(train)-2))), by = 1), labels = 1:(ncol(train)-2))
+index = which(testASE == min(testASE))
+points(index, testASE[index], col = "red", pch = 10)
+
+# We can see (via the red dot) that the minimum Average Squared Error happens 
+# with 2 predictors included in the model.
+
+reg_final = regsubsets(Life.expectancy~., data = train, method = "backward", nvmax = 10)
+coef(reg_final, 9)
+```
+
+## First Regression Model
+```{r, message=F, warning=F}
+first_model = lm(Life.expectancy ~ Status + Adult.Mortality + BMI + Polio + Diphtheria + HIV.AIDS + 
+                                   GDP + Income.composition.of.resources + Schooling, data = train)
+summary(first_model)
+
+## Assumptions
+### Linearity
+plot1 = ggplot(train, aes(x = Life.expectancy, y = Adult.Mortality, color = Status, )) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot2 = ggplot(train, aes(x = Life.expectancy, y = BMI, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot3 = ggplot(train, aes(x = Life.expectancy, y = Polio, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot4 = ggplot(train, aes(x = Life.expectancy, y = Diphtheria, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot5 = ggplot(train, aes(x = Life.expectancy, y = HIV.AIDS, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot6 = ggplot(train, aes(x = Life.expectancy, y = GDP, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot7 = ggplot(train, aes(x = Life.expectancy, y = Income.composition.of.resources, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot8 = ggplot(train, aes(x = Life.expectancy, y = Schooling, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+figure = ggarrange(plot1, plot2, plot3, plot4, plot5, plot6, plot7, plot8, ncol = 3, nrow = 3,
+                   common.legend = TRUE, legend = "bottom")
+annotate_figure(figure, top = text_grob("Scatterplots of First Model", face = "bold", size = 15))
+
+# Adult.Mortality looks quadratic
+# Schooling looks cubic
+
+### Normality
+## Residuals Histogram
+p1 = ggplot(train, aes(resid(first_model))) +
+  geom_histogram(aes(y = ..density..)) +
+  geom_density(alpha = .2, color = "red", fill = "azure") +
+  labs(title = "Histogram of Residual", x = "Residuals", y = "Density")
+## Residuals QQ Plot
+p4 = ggplot(train, aes(sample = resid(first_model))) +
+  geom_qq() +
+  geom_qq_line(color = "red") +
+  labs(title = "QQ Plot of Residuals", x = "Theoretical Quantile", y = "Actual Quantile")
+grid.arrange(p1, p4, ncol = 2)
+# Data is observed to be normal.
+
+### Multicollinearity
+1/(1-summary(first_model)$adj.r.squared)
+VIF(first_model)
+# All variables have VIF < 5
+
+### Autocorrelation (not evaluated)
+acf(first_model$residuals, type = "correlation")
+lmtest::dwtest(first_model)
+#### ACF plot is high in lag 1 but drops suddenly in lag 2
+#### P-value > 0.5 from Durbin-Watson test so no autocorrelation detected
+
+### Homoscedasticity
+#### Residual vs Fitted
+ggplot(first_model, aes(fitted(first_model), resid(first_model))) +
+  geom_point() +
+  geom_smooth(color = "red", se = FALSE, size = 0.5) +
+  labs(title = "Residuals vs Fitted", x = "Predicted Value", y = "Residuals")
+lmtest::gqtest(first_model, fraction = (dim(train)[1]*.2))
+# No evidence against homoscedasticity seen in plot, no fan out from left to right or other way
+# P-value > 0.5 from Goldfeld-Quandt test so no heteroscedasticity detected
+
+### Influential Points 
+par(mfrow=c(1,2))
+plot(first_model, 4)
+plot(first_model, 5)
+as.numeric(names(cooks.distance(first_model))[(cooks.distance(first_model) > 0.05)])
+# No observations detected with Cook's D > 0.05
+# Leverage plot looks good as well
+
+### Interpretation and CI
+summary(first_model)
+confint(first_model)
+
+### Statistics
+paste(mean((test$Life.expectancy - predict(first_model, test))^2), " | ", # test ASE
+      summary(first_model)$r.squared)                                     # R2
+# ASE converted from log-transform is a little high
+# R-squared leaves to be desired
+
+### Predicted vs Actual Plot
+par(mfrow=c(1,1))
+plot(first_model$fitted.values, train$Life.expectancy,
+     xlab = "Predicted", ylab = "Life.expectancy",
+     main = "Train Response vs Predictions",
+     xlim = c(0,100), ylim = c(0,100))
+lines(c(0,100), c(0,100), col = "red")
+
+```
+
+## Fitting the second model
+### Log-transformed Data Scatterplots
+```{r, message=F}
+plot1 = ggplot(train, aes(x = log(Life.expectancy), y = Adult.Mortality, color = Status, )) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot2 = ggplot(train, aes(x = log(Life.expectancy), y = BMI, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot3 = ggplot(train, aes(x = log(Life.expectancy), y = Polio, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot4 = ggplot(train, aes(x = log(Life.expectancy), y = Diphtheria, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot5 = ggplot(train, aes(x = log(Life.expectancy), y = log(HIV.AIDS), color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot6 = ggplot(train, aes(x = log(Life.expectancy), y = log(GDP), color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot7 = ggplot(train, aes(x = log(Life.expectancy), y = Income.composition.of.resources, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+plot8 = ggplot(train, aes(x = log(Life.expectancy), y = Schooling, color = Status)) +
+  geom_point(size = 2, alpha = 0.2) +
+  geom_smooth(size = 0.5, se = FALSE, color = "magenta")
+figure = ggarrange(plot1, plot2, plot3, plot4, plot5, plot6, plot7, plot8, ncol = 3, nrow = 3,
+                   common.legend = TRUE, legend = "bottom")
+annotate_figure(figure, top = text_grob("Log-transformed Data", face = "bold", size = 15))
+
+train$Status = ifelse(train$Status == 'Developed', 1, 0)
+test$Status = ifelse(test$Status == 'Developed', 1, 0)
+
+# Start fit
+second_model = lm(log(Life.expectancy) ~ Status + Adult.Mortality + I(Adult.Mortality^2) + BMI + I(BMI^2) + I(BMI^3) + Polio + I(Polio^2) + I(Polio^3) + Diphtheria + I(Diphtheria^2) + I(Diphtheria^3) + log(HIV.AIDS) + I(log(HIV.AIDS)^2) + I(log(HIV.AIDS)^3) + log(GDP) + I(log(GDP)^2) + I(log(GDP)^3) + Income.composition.of.resources + I(Income.composition.of.resources^2) + I(Income.composition.of.resources^3) + Schooling + I(Schooling^2) + I(Schooling^3), data = train)
+summary(second_model)
+
+### Statistics
+paste(mean((test$Life.expectancy - exp(predict(second_model,test)))^2),  " | ", # test ASE
+      summary(second_model)$r.squared)                                          # R2
+
+### Predicted vs Actual Plot
+par(mfrow=c(1,1))
+plot(exp(second_model$fitted.values), train$Life.expectancy,
+     xlab = "Predicted", ylab = "Life.expectancy",
+     main = "Train Response vs Predictions")
+lines(c(0,100), c(0,100), col="red")
+```
+
+## Fitting the third model
+### 10-fold 10-repeats k-NN Regression
+```{r}
+### Apply all columns as numerics
+train = as.data.frame(apply(train, 2, as.numeric))
+test = as.data.frame(apply(train, 2, as.numeric))
+
+### Normalizing dataset, scale all columns except Life.expectancy
+### Randomizing dataset
+#### Train
+MinMaxScaling = function(x)
+{
+  return ((x - min(x))/(max(x)-min(x)))
+}
+Life.expectancy = train$Life.expectancy
+train = as.data.frame(apply(train, 2, MinMaxScaling))
+train = train[sample(nrow(train)),]
+train$Life.expectancy = Life.expectancy
+#### Test
+Life.expectancy = test$Life.expectancy
+test = as.data.frame(apply(test, 2, MinMaxScaling))
+test = test[sample(nrow(test)),]
+test$Life.expectancy = Life.expectancy
+
+### Cross-validation to find best value for k
+### excluding Status since not numeric
+cv_knn = train(Life.expectancy ~ ., data = df[-1], method = "knn",
+                  trControl = trainControl(method = "repeatedcv", 
+                                           number = 10, repeats = 10),
+                  tuneGrid = expand.grid(k = c(1:20)),
+                  preProcess = c("center", "scale"))
+print(cv_knn)
+
+### Start the algorithm
+#str(train)
+third_model = knn.reg(train = train, y = train$Life.expectancy, k = 3)
+
+
+
+# Validating our knn regression model
+knn_predictions = third_model$pred
+## Peek into the ranges of our predicted and actual values, looks good!
+summary(test$Life.expectancy)  
+summary(knn_predictions)
+
+## Statistics
+mean((test$Life.expectancy - knn_predictions)^2)     # MSE or test ASE or MPSE
+third_model$R2Pred                                   # R-Squared
+#caret::RMSE(test$Life.expectancy, knn_predictions)  # RMSE
+
+### Predicted vs Actual Plot
+par(mfrow=c(1,1))
+plot(knn_predictions, test$Life.expectancy)
+```
+
+
